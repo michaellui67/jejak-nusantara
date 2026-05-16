@@ -107,3 +107,42 @@ export const resizeImage = (file: File, maxWidth: number, maxHeight: number): Pr
         reader.readAsDataURL(file);
     });
 };
+
+// Mock location detection to prevent spoofing
+export const detectMockLocation = (currentLocation: { lat: number; lng: number }, 
+                                  previousLocation: { lat: number; lng: number } | null,
+                                  timestamp: number): boolean => {
+    // If no previous location, assume it's valid
+    if (!previousLocation) return false;
+    
+    // Calculate distance between locations
+    const distance = calculateDistance(
+        currentLocation.lat, 
+        currentLocation.lng, 
+        previousLocation.lat, 
+        previousLocation.lng
+    );
+    
+    // Calculate time difference in minutes (using current time for simplicity)
+    const timeDiff = (Date.now() - timestamp) / 60000; // in minutes
+    
+    // If moving too fast (more than 50km/h) or too slow (0km/h) in short time, likely spoofed
+    if (timeDiff > 0) {
+        const speed = distance / (timeDiff / 60); // km/h
+        // Very high speed (>50km/h) over short period suggests spoofing
+        if (speed > 50) {
+            return true;
+        }
+        // Very low speed (<1km/h) over long period suggests spoofing
+        if (speed < 1 && timeDiff > 5) {
+            return true;
+        }
+    }
+    
+    // If location changed dramatically without enough time passed, likely spoofed
+    if (distance > 10 && timeDiff < 1) {
+        return true;
+    }
+    
+    return false;
+};

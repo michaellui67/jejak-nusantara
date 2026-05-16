@@ -12,7 +12,8 @@
     "react": "latest",
     "react-dom": "latest",
     "lucide-react": "latest",
-    "html-to-image": "latest"
+    "html-to-image": "latest",
+    "firebase": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
@@ -21,3 +22,4 @@
     "vite": "latest"
   }
 }
+
