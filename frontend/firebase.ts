@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 // Firebase configuration - Replace with your actual config
 const firebaseConfig = {
@@ -19,6 +20,7 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 // Firebase authentication functions
 export const signInWithGoogle = async () => {
@@ -37,6 +39,20 @@ export const logout = async () => {
     await signOut(auth);
   } catch (error) {
     console.error("Logout error:", error);
+    throw error;
+  }
+};
+
+// Storage functions
+export const uploadStampImage = async (userId: string, locationId: number, base64Image: string) => {
+  try {
+    const storageRef = ref(storage, `stamps/${userId}/${locationId}.jpg`);
+    // uploadString handles the data_url format
+    const snapshot = await uploadString(storageRef, base64Image, 'data_url');
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
+  } catch (error) {
+    console.error("Error uploading image to storage:", error);
     throw error;
   }
 };

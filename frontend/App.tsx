@@ -4,6 +4,7 @@ import { toJpeg } from 'html-to-image';
 import { LOCATIONS, BADGES, TRANSLATIONS } from './data';
 import { calculateDistance, playGongSound, getRank, resizeImage } from './utils';
 import { AppState, Location, Tab, Language, CollectedStamp, UserProfile } from './types';
+import { signInWithGoogle, logout as firebaseLogout, savePassportData, loadPassportData, uploadStampImage } from './firebase';
 
 // --- Components ---
 
@@ -176,27 +177,91 @@ const LocationModal: React.FC<{
 const UnlockCeremony: React.FC<{ location: Location; onComplete: () => void }> = ({ location, onComplete }) => {
     useEffect(() => {
         playGongSound();
-        const timer = setTimeout(onComplete, 3000);
+        const timer = setTimeout(onComplete, 4000);
         return () => clearTimeout(timer);
     }, [onComplete]);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-batik-50/95 backdrop-blur-md">
-            <div className="flex flex-col items-center animate-stamp-drop">
-                <div className="w-64 h-64 rounded-full border-8 border-batik-700 flex items-center justify-center bg-white shadow-2xl relative overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-batik-900/90 backdrop-blur-xl overflow-hidden">
+            {/* Burst Effect */}
+            <div className="absolute w-64 h-64 bg-batik-400 rounded-full mix-blend-screen filter blur-3xl opacity-30 animate-burst"></div>
+            <div className="absolute w-96 h-96 bg-batik-600 rounded-full mix-blend-screen filter blur-3xl opacity-20 animate-burst [animation-delay:200ms]"></div>
+            
+            {/* Confetti Elements (CSS only) */}
+            <div className="absolute inset-0 pointer-events-none">
+                {[...Array(12)].map((_, i) => (
+                    <div 
+                        key={i}
+                        className="absolute w-3 h-3 bg-batik-300 rounded-sm animate-confetti-pop"
+                        style={{
+                            left: `${20 + Math.random() * 60}%`,
+                            top: `${40 + Math.random() * 20}%`,
+                            animationDelay: `${Math.random() * 500}ms`,
+                            transform: `rotate(${Math.random() * 360}deg)`
+                        }}
+                    ></div>
+                ))}
+            </div>
+
+            <div className="flex flex-col items-center animate-stamp-drop z-10">
+                <div className="w-64 h-64 rounded-full border-8 border-white flex items-center justify-center bg-white shadow-[0_0_50px_rgba(255,255,255,0.4)] relative overflow-hidden">
                     <img 
                         src={`https://picsum.photos/seed/${location.id}/400/400`} 
                         alt="Stamp"
                         className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 border-[12px] border-batik-700 rounded-full opacity-50 mix-blend-overlay"></div>
+                    <div className="absolute inset-0 border-[12px] border-batik-700/30 rounded-full mix-blend-overlay"></div>
+                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }}></div>
                 </div>
-                <h2 className="text-4xl font-bold text-batik-900 mt-8 text-center px-4 drop-shadow-sm">
+                <h2 className="text-4xl font-black text-white mt-12 text-center px-4 drop-shadow-lg tracking-tight">
                     {location.name}
                 </h2>
-                <p className="text-batik-600 text-xl mt-2 font-medium tracking-widest uppercase">
-                    Unlocked
+                <p className="text-batik-200 text-xl mt-4 font-bold tracking-[0.3em] uppercase opacity-0 animate-fade-in [animation-delay:600ms]">
+                    Stamp Unlocked
                 </p>
+            </div>
+        </div>
+    );
+};
+
+const BadgeCelebration: React.FC<{ badge: Badge; onComplete: () => void; lang: Language }> = ({ badge, onComplete, lang }) => {
+    useEffect(() => {
+        playGongSound();
+        const timer = setTimeout(onComplete, 5000);
+        return () => clearTimeout(timer);
+    }, [onComplete]);
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-batik-900/95 backdrop-blur-2xl p-6">
+            <div className="max-w-xs w-full flex flex-col items-center text-center">
+                <div className="relative mb-12">
+                    {/* Multiple Burst Rings */}
+                    <div className="absolute inset-0 bg-batik-400 rounded-full animate-burst opacity-40"></div>
+                    <div className="absolute inset-0 bg-batik-200 rounded-full animate-burst [animation-delay:300ms] opacity-30"></div>
+                    
+                    <div className="w-48 h-48 bg-gradient-to-b from-batik-300 to-batik-600 rounded-3xl rotate-45 flex items-center justify-center shadow-2xl animate-scale-in relative z-10 border-4 border-white">
+                        <div className="-rotate-45">
+                            <Award size={80} className="text-white drop-shadow-md" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="opacity-0 animate-slide-up [animation-delay:400ms]">
+                    <h3 className="text-batik-200 font-bold uppercase tracking-[0.2em] mb-2">Collection Complete</h3>
+                    <h2 className="text-4xl font-black text-white mb-6 leading-tight">
+                        {badge.name}
+                    </h2>
+                    <p className="text-batik-100 text-lg leading-relaxed px-4">
+                        {lang === 'en' ? badge.descriptionEn : badge.descriptionId}
+                    </p>
+                </div>
+
+                <button 
+                    onClick={onComplete}
+                    className="mt-12 px-12 py-4 bg-white text-batik-900 rounded-2xl font-black text-lg shadow-xl hover:scale-105 active:scale-95 transition-transform opacity-0 animate-fade-in [animation-delay:1200ms]"
+                >
+                    AWESOME!
+                </button>
             </div>
         </div>
     );
@@ -346,10 +411,6 @@ export default function App() {
                 if (parsed.user === undefined) {
                     parsed.user = null;
                 }
-                // Clean up legacy demoMode if it exists in saved state
-                if ('demoMode' in parsed) {
-                    delete parsed.demoMode;
-                }
                 return parsed;
             } catch (e) {
                 console.error("Failed to parse state", e);
@@ -369,91 +430,69 @@ export default function App() {
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const profilePicRef = useRef<HTMLInputElement>(null);
 
-    // Save state on change
+    // Save state on change (local fallback)
     useEffect(() => {
         try {
             localStorage.setItem('jejak_nusantara_state', JSON.stringify(state));
         } catch (e) {
-            console.error("Failed to save state to localStorage. Quota might be exceeded.", e);
+            console.error("Failed to save state to localStorage.", e);
         }
     }, [state]);
 
-    // Geolocation simulation/tracking
+    // Geolocation tracking
     useEffect(() => {
+        if (state.isSpoofing) {
+            setState(s => ({
+                ...s,
+                currentLocation: { lat: s.spoofLat || 0, lng: s.spoofLng || 0 }
+            }));
+            return;
+        }
+
         if (navigator.geolocation) {
             const watchId = navigator.geolocation.watchPosition(
                 (pos) => {
-                    setState(s => ({
-                        ...s,
-                        currentLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude }
-                    }));
+                    setState(s => {
+                        if (s.isSpoofing) return s;
+                        return {
+                            ...s,
+                            currentLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude }
+                        };
+                    });
                 },
                 (err) => console.warn("Geolocation error:", err),
                 { enableHighAccuracy: true, maximumAge: 10000 }
             );
             return () => navigator.geolocation.clearWatch(watchId);
         }
-    }, []);
+    }, [state.isSpoofing, state.spoofLat, state.spoofLng]);
 
     const t = TRANSLATIONS[state.language];
 
-    // Google Login Initialization
-    useEffect(() => {
-        if (state.user) return;
-
-        const handleCredentialResponse = (response: any) => {
-            try {
-                const base64Url = response.credential.split('.')[1];
-                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                }).join(''));
-                const payload = JSON.parse(jsonPayload);
-
+    const handleGoogleLogin = async () => {
+        try {
+            const user = await signInWithGoogle();
+            if (user) {
                 setState(s => ({
                     ...s,
                     user: {
-                        name: payload.name,
+                        uid: user.uid,
+                        name: user.displayName || 'Explorer',
                         isGuest: false,
-                        profilePicture: payload.picture
+                        profilePicture: user.photoURL || undefined
                     }
                 }));
-            } catch (e) {
-                console.error("Failed to decode JWT", e);
             }
-        };
-
-        const initGoogle = () => {
-            if (window.google && window.google.accounts) {
-                window.google.accounts.id.initialize({
-                    // Note: Replace this with your actual Google Client ID
-                    client_id: "YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com", 
-                    callback: handleCredentialResponse
-                });
-                window.google.accounts.id.renderButton(
-                    document.getElementById("googleSignInDiv"),
-                    { theme: "outline", size: "large" }
-                );
-            }
-        };
-
-        if (window.google) {
-            initGoogle();
-        } else {
-            const interval = setInterval(() => {
-                if (window.google) {
-                    clearInterval(interval);
-                    initGoogle();
-                }
-            }, 100);
-            return () => clearInterval(interval);
+        } catch (e) {
+            console.error("Google Login failed", e);
         }
-    }, [state.user]);
+    };
 
     const handleGuestLogin = () => {
         setState(s => ({
             ...s,
             user: {
+                uid: 'guest-' + Date.now(),
                 name: t.guest,
                 isGuest: true,
                 profilePicture: undefined
@@ -461,45 +500,130 @@ export default function App() {
         }));
     };
 
-    const handleLogout = () => {
-        setState(s => ({ ...s, user: null }));
+    const handleLogout = async () => {
+        try {
+            await firebaseLogout();
+            setState(s => ({ ...s, user: null, collected: [] }));
+            localStorage.removeItem('jejak_nusantara_state');
+        } catch (e) {
+            console.error("Logout failed", e);
+        }
     };
 
-    const handleUnlock = useCallback((id: number) => {
-        const loc = LOCATIONS.find(l => l.id === id);
-        if (!loc) return;
-        
-        setState(s => {
-            if (s.collected.some(c => c.locationId === id)) return s;
-            return {
-                ...s,
-                collected: [...s.collected, { locationId: id, timestamp: Date.now() }]
-            };
-        });
-        setSelectedLocation(null);
-        setUnlockingLocation(loc);
-    }, []);
+    // Firestore Sync: Load data on login
+    useEffect(() => {
+        const loadCloudData = async () => {
+            if (state.user && !state.user.isGuest) {
+                try {
+                    const cloudData = await loadPassportData(state.user.uid);
+                    if (cloudData && cloudData.collectedStamps) {
+                        setState(s => ({
+                            ...s,
+                            collected: cloudData.collectedStamps
+                        }));
+                    }
+                } catch (e) {
+                    console.error("Failed to load cloud data", e);
+                }
+            }
+        };
+        loadCloudData();
+    }, [state.user?.uid]);
 
-    const handleImageUpload = useCallback((id: number, imageData: string) => {
-        setState(s => ({
-            ...s,
-            collected: s.collected.map(c => 
-                c.locationId === id ? { ...c, customImage: imageData } : c
-            )
-        }));
-    }, []);
+    // Firestore Sync: Save data on change
+    useEffect(() => {
+        const saveCloudData = async () => {
+            if (state.user && !state.user.isGuest && state.collected.length > 0) {
+                try {
+                    await savePassportData(state.user.uid, state.collected);
+                } catch (e) {
+                    console.error("Failed to save cloud data", e);
+                }
+            }
+        };
+        saveCloudData();
+    }, [state.collected, state.user?.uid]);
+
+    const handleUnlock = useCallback(async (id: number) => {
+        const loc = LOCATIONS.find(l => l.id === id);
+        if (!loc || !state.currentLocation) return;
+        
+        try {
+            const response = await fetch('/api/verify-location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    locationId: id,
+                    userLat: state.currentLocation.lat,
+                    userLng: state.currentLocation.lng
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                setState(s => {
+                    if (s.collected.some(c => c.locationId === id)) return s;
+                    return {
+                        ...s,
+                        collected: [...s.collected, { locationId: id, timestamp: result.timestamp }]
+                    };
+                });
+                setSelectedLocation(null);
+                setUnlockingLocation(loc);
+            } else {
+                alert(result.error || "Verification failed");
+            }
+        } catch (error) {
+            console.error("Unlock failed", error);
+            alert("Network error during verification");
+        }
+    }, [state.currentLocation]);
+
+    const handleImageUpload = useCallback(async (id: number, imageData: string) => {
+        if (!state.user) return;
+
+        try {
+            let finalImageUrl = imageData;
+            
+            // If logged in as non-guest, upload to Firebase Storage
+            if (!state.user.isGuest) {
+                finalImageUrl = await uploadStampImage(state.user.uid, id, imageData);
+            }
+
+            setState(s => ({
+                ...s,
+                collected: s.collected.map(c => 
+                    c.locationId === id ? { ...c, customImage: finalImageUrl } : c
+                )
+            }));
+        } catch (error) {
+            console.error("Failed to upload image", error);
+            alert("Error saving image to cloud storage");
+        }
+    }, [state.user]);
 
     const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
+        if (file && state.user) {
             try {
                 const resized = await resizeImage(file, 400, 400);
+                let finalImageUrl = resized;
+
+                if (!state.user.isGuest) {
+                    // Reusing uploadStampImage with a special ID or creating a profile path
+                    // For now, let's use a convention for profile pictures
+                    const storageRef = ref(storage, `profiles/${state.user.uid}.jpg`);
+                    await uploadString(storageRef, resized, 'data_url');
+                    finalImageUrl = await getDownloadURL(storageRef);
+                }
+
                 setState(s => ({
                     ...s,
-                    user: s.user ? { ...s.user, profilePicture: resized } : null
+                    user: s.user ? { ...s.user, profilePicture: finalImageUrl } : null
                 }));
             } catch (err) {
-                console.error("Failed to resize profile picture", err);
+                console.error("Failed to resize/upload profile picture", err);
             }
         }
     };
@@ -529,31 +653,51 @@ export default function App() {
     if (!state.user) {
         return (
             <div className="h-full w-full flex flex-col items-center justify-center bg-batik-50 relative max-w-md mx-auto shadow-2xl overflow-hidden p-6">
-                <div className="w-32 h-32 bg-white rounded-full shadow-lg flex items-center justify-center mb-8 border-4 border-batik-600">
-                    <MapIcon size={48} className="text-batik-700" />
-                </div>
-                <h1 className="text-3xl font-bold text-batik-900 mb-2 text-center">{t.login}</h1>
-                <p className="text-batik-600 text-center mb-12">Digital Stamp Passport for Indonesian Tourism</p>
+                {/* Background Pattern Overlay */}
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23a14526\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')]"></div>
                 
-                <div className="w-full space-y-4 flex flex-col items-center">
-                    <div id="googleSignInDiv" className="w-full flex justify-center"></div>
-                    <p className="text-xs text-gray-400 text-center">
-                        Note: Google Login requires a valid Client ID configured in App.tsx
-                    </p>
-                    
-                    <div className="w-full flex items-center gap-4 my-2">
-                        <div className="flex-1 h-px bg-gray-300"></div>
-                        <span className="text-gray-400 text-sm font-medium">OR</span>
-                        <div className="flex-1 h-px bg-gray-300"></div>
+                <div className="relative z-10 w-full flex flex-col items-center animate-slide-up">
+                    <div className="w-32 h-32 bg-white rounded-full shadow-xl flex items-center justify-center mb-8 border-4 border-batik-600 animate-float">
+                        <MapIcon size={48} className="text-batik-700" />
                     </div>
+                    
+                    <div className="text-center mb-12 opacity-0 animate-fade-in [animation-delay:200ms]">
+                        <h1 className="text-4xl font-bold text-batik-900 mb-2">Jejak Nusantara</h1>
+                        <p className="text-batik-600 font-medium">Your Digital Explorer Passport</p>
+                    </div>
+                    
+                    <div className="w-full space-y-4 flex flex-col items-center opacity-0 animate-fade-in [animation-delay:400ms]">
+                        <button 
+                            onClick={handleGoogleLogin}
+                            className="w-full py-4 bg-white text-gray-700 rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all border border-gray-100 hover:bg-gray-50"
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M23.7449 12.27C23.7449 11.48 23.6749 10.73 23.5549 10H12.2449V14.51H18.7249C18.4349 15.99 17.5849 17.24 16.3249 18.09V21.09H20.1849C22.4749 19 23.7449 15.92 23.7449 12.27Z" fill="#4285F4"/>
+                                <path d="M12.2449 24C15.4849 24 18.2049 22.92 20.1849 21.09L16.3249 18.09C15.2449 18.81 13.8649 19.22 12.2449 19.22C9.12489 19.22 6.47489 17.11 5.52489 14.3H1.54489V17.38C3.52489 21.31 7.55489 24 12.2449 24Z" fill="#34A853"/>
+                                <path d="M5.52489 14.3C5.27489 13.55 5.14489 12.75 5.14489 11.92C5.14489 11.09 5.27489 10.29 5.52489 9.54V6.46H1.54489C0.694894 8.1 0.214894 9.96 0.214894 11.92C0.214894 13.88 0.694894 15.74 1.54489 17.38L5.52489 14.3Z" fill="#FBBC05"/>
+                                <path d="M12.2449 4.78C14.0049 4.78 15.5849 5.39 16.8249 6.57L20.2649 3.13C18.1949 1.14 15.4749 0 12.2449 0C7.55489 0 3.52489 2.69 1.54489 6.62L5.52489 9.7C6.47489 6.89 9.12489 4.78 12.2449 4.78Z" fill="#EA4335"/>
+                            </svg>
+                            {t.login}
+                        </button>
+                        
+                        <div className="w-full flex items-center gap-4 my-2">
+                            <div className="flex-1 h-px bg-gray-200"></div>
+                            <span className="text-gray-400 text-xs font-bold tracking-widest">ATAU</span>
+                            <div className="flex-1 h-px bg-gray-200"></div>
+                        </div>
 
-                    <button 
-                        onClick={handleGuestLogin}
-                        className="w-full py-3 bg-batik-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md active:scale-95 transition-transform"
-                    >
-                        <User size={20} />
-                        {t.loginGuest}
-                    </button>
+                        <button 
+                            onClick={handleGuestLogin}
+                            className="w-full py-4 bg-batik-700 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all hover:bg-batik-800"
+                        >
+                            <User size={20} />
+                            {t.loginGuest}
+                        </button>
+                    </div>
+                    
+                    <p className="mt-12 text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-0 animate-fade-in [animation-delay:800ms]">
+                        Indonesian Tourism Heritage
+                    </p>
                 </div>
             </div>
         );
@@ -561,7 +705,7 @@ export default function App() {
 
     // Views
     const renderPassport = () => (
-        <div className="flex-1 overflow-y-auto pb-24">
+        <div className="flex-1 overflow-y-auto pb-24 animate-fade-in">
             <div className="p-6 bg-batik-800 text-batik-50 shadow-md">
                 <h1 className="text-3xl font-bold mb-1">Jejak Nusantara</h1>
                 <p className="text-batik-200">{state.collected.length} / {LOCATIONS.length} {t.stampsCollected}</p>
@@ -575,7 +719,7 @@ export default function App() {
     );
 
     const renderDiscovery = () => (
-        <div className="flex-1 overflow-y-auto pb-24 bg-gray-50">
+        <div className="flex-1 overflow-y-auto pb-24 bg-gray-50 animate-fade-in">
             <div className="p-4 bg-white shadow-sm sticky top-0 z-10 flex justify-between items-center">
                 <h2 className="text-xl font-bold text-batik-900">{t.nearby}</h2>
             </div>
@@ -622,7 +766,7 @@ export default function App() {
     );
 
     const renderCollections = () => (
-        <div className="flex-1 overflow-y-auto pb-24">
+        <div className="flex-1 overflow-y-auto pb-24 animate-fade-in">
             <div className="p-6 bg-batik-800 text-batik-50 shadow-md">
                 <h1 className="text-2xl font-bold">{t.collections}</h1>
                 <p className="text-batik-200">{earnedBadges.length} / {BADGES.length} {t.badgesEarned}</p>
@@ -668,7 +812,7 @@ export default function App() {
     );
 
     const renderProfile = () => (
-        <div className="flex-1 overflow-y-auto pb-24 bg-gray-50">
+        <div className="flex-1 overflow-y-auto pb-24 bg-gray-50 animate-fade-in">
             <div className="p-8 bg-batik-800 text-batik-50 flex flex-col items-center justify-center text-center shadow-md">
                 <h2 className="text-2xl font-bold mb-4">{state.user?.name || t.guest}</h2>
                 <div className="relative">
@@ -721,6 +865,39 @@ export default function App() {
                         >
                             <LogOut size={20} />
                         </button>
+                    </div>
+
+                    {/* GPS Spoofing for Test Branch */}
+                    <div className="flex flex-col gap-2 py-3 border-t border-gray-100 mt-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-700 font-medium">GPS Spoofing (Test)</span>
+                            <button 
+                                onClick={() => setState(s => ({ ...s, isSpoofing: !s.isSpoofing }))}
+                                className={`px-4 py-1.5 rounded-full text-sm font-bold ${state.isSpoofing ? 'bg-batik-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                            >
+                                {state.isSpoofing ? 'ON' : 'OFF'}
+                            </button>
+                        </div>
+                        {state.isSpoofing && (
+                            <div className="flex gap-2 mt-2">
+                                <input 
+                                    type="number" 
+                                    value={state.spoofLat || 0}
+                                    onChange={e => setState(s => ({ ...s, spoofLat: parseFloat(e.target.value) }))}
+                                    placeholder="Lat"
+                                    className="border rounded px-2 py-1 flex-1 w-full text-sm bg-gray-50"
+                                    step="any"
+                                />
+                                <input 
+                                    type="number" 
+                                    value={state.spoofLng || 0}
+                                    onChange={e => setState(s => ({ ...s, spoofLng: parseFloat(e.target.value) }))}
+                                    placeholder="Lng"
+                                    className="border rounded px-2 py-1 flex-1 w-full text-sm bg-gray-50"
+                                    step="any"
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
 

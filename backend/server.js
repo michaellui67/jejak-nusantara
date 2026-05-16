@@ -10,9 +10,23 @@ import { GoogleAuth } from 'google-auth-library';
 import fetch from 'node-fetch';
 import rateLimit from 'express-rate-limit';
 import { WebSocketServer, WebSocket } from 'ws';
+import { LOCATION_COORDINATES } from './locations.js';
 
 const app = express();
 app.use(express.json({limit: process?.env?.API_PAYLOAD_MAX_SIZE || "7mb"}));
+
+// Haversine formula for distance calculation
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+}
 
 const PORT = process?.env?.API_BACKEND_PORT || 5000;
 const API_BACKEND_HOST = process?.env?.API_BACKEND_HOST || "127.0.0.1";
@@ -307,6 +321,39 @@ app.post('/api-proxy', async (req, res) => {
     console.error(`[Node Proxy] Error proxying request for ${apiClient.name}`);
     console.error(error)
     res.status(500).json({ error: error });
+  }
+});
+
+
+// --- Verification Endpoint ---
+app.post('/api/verify-location', (req, res) => {
+  const { locationId, userLat, userLng } = req.body;
+
+  if (!locationId || userLat === undefined || userLng === undefined) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  const targetLoc = LOCATION_COORDINATES[locationId];
+  if (!targetLoc) {
+    return res.status(404).json({ error: 'Location not found in registry' });
+  }
+
+  const distance = calculateDistance(userLat, userLng, targetLoc.lat, targetLoc.lng);
+  const isWithinRange = distance <= 0.15; // 150m (slightly more generous for GPS jitter)
+
+  if (isWithinRange) {
+    res.json({ 
+      success: true, 
+      message: 'Location verified!', 
+      distance,
+      timestamp: Date.now() 
+    });
+  } else {
+    res.status(403).json({ 
+      success: false, 
+      error: 'Too far from location', 
+      distance 
+    });
   }
 });
 

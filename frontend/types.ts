@@ -30,6 +30,7 @@ export interface Badge {
 }
 
 export interface UserProfile {
+    uid: string;
     name: string;
     isGuest: boolean;
     profilePicture?: string;
@@ -43,6 +44,9 @@ export interface AppState {
     language: Language;
     currentLocation: { lat: number; lng: number } | null;
     user: UserProfile | null;
+    isSpoofing?: boolean;
+    spoofLat?: number;
+    spoofLng?: number;
 }
 
 declare global {
