@@ -1,0 +1,7 @@
+{
+  "name": "Jejak Nusantara",
+  "description": "Digital Stamp Passport for Indonesian Tourism. Collect unique stamps by visiting landmarks across the archipelago.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
