@@ -879,23 +879,40 @@ export default function App() {
                             </button>
                         </div>
                         {state.isSpoofing && (
-                            <div className="flex gap-2 mt-2">
-                                <input 
-                                    type="number" 
-                                    value={state.spoofLat || 0}
-                                    onChange={e => setState(s => ({ ...s, spoofLat: parseFloat(e.target.value) }))}
-                                    placeholder="Lat"
-                                    className="border rounded px-2 py-1 flex-1 w-full text-sm bg-gray-50"
-                                    step="any"
-                                />
-                                <input 
-                                    type="number" 
-                                    value={state.spoofLng || 0}
-                                    onChange={e => setState(s => ({ ...s, spoofLng: parseFloat(e.target.value) }))}
-                                    placeholder="Lng"
-                                    className="border rounded px-2 py-1 flex-1 w-full text-sm bg-gray-50"
-                                    step="any"
-                                />
+                            <div className="flex flex-col gap-2 mt-2">
+                                <select 
+                                    className="w-full p-2 border rounded-lg bg-white text-sm"
+                                    onChange={(e) => {
+                                        const loc = LOCATIONS.find(l => l.id === parseInt(e.target.value));
+                                        if (loc) {
+                                            setState(s => ({ ...s, spoofLat: loc.lat, spoofLng: loc.lng }));
+                                        }
+                                    }}
+                                    defaultValue=""
+                                >
+                                    <option value="" disabled>-- Teleport to Location --</option>
+                                    {LOCATIONS.map(loc => (
+                                        <option key={loc.id} value={loc.id}>{loc.name} ({loc.province})</option>
+                                    ))}
+                                </select>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="number" 
+                                        value={state.spoofLat || ''}
+                                        onChange={e => setState(s => ({ ...s, spoofLat: parseFloat(e.target.value) || 0 }))}
+                                        placeholder="Lat"
+                                        className="border rounded px-2 py-1 flex-1 w-full text-sm bg-gray-50"
+                                        step="any"
+                                    />
+                                    <input 
+                                        type="number" 
+                                        value={state.spoofLng || ''}
+                                        onChange={e => setState(s => ({ ...s, spoofLng: parseFloat(e.target.value) || 0 }))}
+                                        placeholder="Lng"
+                                        className="border rounded px-2 py-1 flex-1 w-full text-sm bg-gray-50"
+                                        step="any"
+                                    />
+                                </div>
                             </div>
                         )}
                     </div>
